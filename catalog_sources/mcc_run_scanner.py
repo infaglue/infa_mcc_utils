@@ -24,6 +24,12 @@ cdgc_api_url = os.getenv("INFORMATICA_CDGC_API_URL", "https://cdgc-api.dmp-us.in
 # ----------------------------------------------------------------------------------------------------------------------------------------------
 # Functions
 # ----------------------------------------------------------------------------------------------------------------------------------------------
+class HelpOnErrorParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_help()
+        print(f'\nError: {message}', file=sys.stderr)
+        sys.exit(2)
+
 def search_catalog_source(cdgc, sourceName):
     """
     Search for a catalog source by name
@@ -160,14 +166,14 @@ def execute_catalog_source(cdgc, catalogSource, capabilities=None):
         return False, None
 
 
-def monitor_job(cdgc, job_info, poll_interval=10, timeout=3600):
+def monitor_job(cdgc, job_info, poll_interval=30, timeout=3600):
     """
     Monitor a catalog source job until completion
 
     Args:
         cdgc: CDGC client instance
         job_info: Dictionary containing jobId and other job information
-        poll_interval: Seconds between status checks (default: 10)
+        poll_interval: Seconds between status checks (default: 30)
         timeout: Maximum seconds to wait (default: 3600 = 1 hour)
 
     Returns:
@@ -235,13 +241,16 @@ def monitor_job(cdgc, job_info, poll_interval=10, timeout=3600):
 # Main
 # ----------------------------------------------------------------------------------------------------------------------------------------------
 def main(argv):
-    parser = argparse.ArgumentParser(
-        description="Execute a catalog source scan job by name and monitor its completion."
+
+    parser = HelpOnErrorParser(
+        description="Execute a catalog source scan job by name and monitor its completion.",
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=55, width=125)
     )
-    parser.add_argument('-n', '--name', required=True, help='The name of the catalog source to execute.')
+
+    parser.add_argument('-n', '--name', required=False, help='The name of the catalog source to execute.')
 
     # Capability flags
-    for flag, desc in [
+    for short_flag, long_flag, desc in [
         ('me', 'metadata-extraction', 'Metadata Extraction'),
         ('dp', 'data-profiling', 'Data Profiling'),
         ('dc', 'data-classification', 'Data Classification'),
@@ -250,15 +259,19 @@ def main(argv):
         ('ga', 'glossary-association', 'Glossary Association'),
         ('ld', 'lineage-discovery', 'Lineage Discovery')
     ]:
-        parser.add_argument(f'-{flag[0]}', f'--{flag[1]}', action='store_true', help=f'Run {flag[2]} capability.')
+        parser.add_argument(f'-{short_flag}', f'--{long_flag}', action='store_true', help=f'Run {desc} capability.')
 
-    parser.add_argument('-p', '--poll-interval', type=int, default=10, help='Seconds between job status checks (default: 10).')
+    parser.add_argument('-p', '--poll-interval', type=int, default=30, help='Seconds between job status checks (default: 10).')
     parser.add_argument('-t', '--timeout', type=int, default=3600, help='Maximum seconds to wait for job completion (default: 3600).')
     parser.add_argument('--no-wait', action='store_true', help='Do not wait for job completion, just start the job and exit.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging for debugging.')
     parser.add_argument('-j', '--json', action='store_true', help='Output job information in JSON format.')
 
     args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     sourceName = args.name
 
